@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Malwarebytes Privacy VPN GUI Launcher
+set -e
+
+# If installed system-wide in /usr/share/mbvpn-gui
+if [ -f "/usr/share/mbvpn-gui/app.py" ]; then
+    exec python3 /usr/share/mbvpn-gui/app.py "$@"
+fi
+
+# If running relative to this launcher (e.g. git clone, local development, or package build)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -f "$SCRIPT_DIR/app.py" ]; then
+    exec python3 "$SCRIPT_DIR/app.py" "$@"
+fi
+
+# Fallback: check ~/.local/share/mbvpn-gui
+if [ -f "$HOME/.local/share/mbvpn-gui/app.py" ]; then
+    exec python3 "$HOME/.local/share/mbvpn-gui/app.py" "$@"
+fi
+
+echo "Error: Malwarebytes VPN GUI (app.py) could not be located." >&2
+exit 1

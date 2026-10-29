@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=MalwarebytesVPN
+GenericName=WireGuard VPN Client
+Comment=Malwarebytes WireGuard VPN Client
+Exec=mbvpn-gui %u
+Icon=mbvpn
+Terminal=false
+Type=Application
+Categories=Network;Security;
+Keywords=vpn;privacy;malwarebytes;wireguard;tunnel;security;MalwarebytesVPN;mbvpn;
+StartupWMClass=org.paradoxbyte.mbvpn
+X-GNOME-UsesNotifications=true

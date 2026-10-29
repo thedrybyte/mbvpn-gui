@@ -1,0 +1,21 @@
+pkgbase = mbvpn-gui
+	pkgdesc = Native GTK4/Libadwaita GUI client for Malwarebytes Privacy VPN on Linux
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://github.com/thedrybyte/mbvpn-gui
+	install = mbvpn-gui.install
+	arch = x86_64
+	license = GPL-3.0-or-later
+	makedepends = gcc
+	depends = python
+	depends = python-gobject
+	depends = gtk4
+	depends = libadwaita
+	depends = networkmanager
+	depends = wireguard-tools
+	depends = nftables
+	depends = python-cairo
+	optdepends = mbvpn: official Malwarebytes WireGuard CLI backend
+	optdepends = libayatana-appindicator: fallback system tray indicator support
+
+pkgname = mbvpn-gui

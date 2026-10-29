@@ -1,0 +1,23 @@
+post_install() {
+    echo ":: Configuring network capabilities for Kill Switch firewall..."
+    setcap cap_net_admin,cap_net_raw+eip /usr/bin/mbvpn-firewall 2>/dev/null || true
+
+    echo ":: Updating desktop and icon caches..."
+    update-desktop-database -q 2>/dev/null || true
+    gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor 2>/dev/null || true
+
+    echo ""
+    echo ":: Malwarebytes Privacy VPN GUI installed successfully."
+    echo ":: If using the official mbvpn CLI backend, grant network administration capability once:"
+    echo "   sudo setcap cap_net_admin,cap_net_raw+eip /usr/bin/mbvpn"
+    echo ""
+}
+
+post_upgrade() {
+    post_install
+}
+
+post_remove() {
+    update-desktop-database -q 2>/dev/null || true
+    gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor 2>/dev/null || true
+}

@@ -1,0 +1,38 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# C compiler artifacts
+*.o
+*.a
+mbvpn-firewall
+
+# Backups and editor swap files
+*.bak*
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Arch Linux makepkg / build artifacts
+pkg/
+src/
+*.pkg.tar.zst
+*.pkg.tar.xz
+
+# Development scratch files & research dumps
+extracted_apk/
+extracted_expressvpn/
+crop_*.png
+repro_*.py
+test_categories_and_dns.py
+test_category_interactions.py
+test_killswitch_and_mac.py
+PROGRESS.md
+
+# Virtual environments
+.venv/
+venv/
+env/
