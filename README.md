@@ -16,6 +16,18 @@ https://github.com/user-attachments/assets/8387c5f6-2ed9-4fe0-8606-429c3ced08c8
 
 ---
 
+## Screenshots
+
+<p align="center">
+  <img src="assets/screenshots/dashboard.png" width="240" alt="Dashboard" />
+  <img src="assets/screenshots/locations.png" width="240" alt="Locations Browser" />
+  <img src="assets/screenshots/settings.png" width="240" alt="Settings & Privacy" />
+  <img src="assets/screenshots/split-tunneling.png" width="240" alt="Website Split Tunneling" />
+  <img src="assets/screenshots/account.png" width="240" alt="Account & License" />
+</p>
+
+---
+
 ## Installation
 
 ### One-Command Install (Recommended)
