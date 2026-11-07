@@ -3048,8 +3048,8 @@ class MbVpnWindow(Adw.ApplicationWindow):
         dialog.add_css_class("mullvad-window")
         dialog.add_css_class("mbvpn-window")
         dialog.set_title("Settings")
-        dialog.set_default_size(380, 560)
-        dialog.set_size_request(360, 500)
+        dialog.set_default_size(380, 545)
+        dialog.set_size_request(380, 545)
         dialog.set_resizable(False)
         self._settings_dialog = dialog
 
@@ -4300,9 +4300,10 @@ class MbVpnWindow(Adw.ApplicationWindow):
         """
         dialog = Adw.Window(transient_for=self, modal=True)
         dialog.add_css_class("mullvad-window")
+        dialog.add_css_class("mbvpn-window")
         dialog.set_title("VPN Locations and Servers")
-        dialog.set_default_size(380, 580)
-        dialog.set_size_request(360, 520)
+        dialog.set_default_size(380, 545)
+        dialog.set_size_request(380, 545)
         dialog.set_resizable(False)
 
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -4537,9 +4538,10 @@ class MbVpnWindow(Adw.ApplicationWindow):
         """Account, subscription status, and license activation modal"""
         dialog = Adw.Window(transient_for=self, modal=True)
         dialog.add_css_class("mullvad-window")
+        dialog.add_css_class("mbvpn-window")
         dialog.set_title("Account and License")
-        dialog.set_default_size(380, 560)
-        dialog.set_size_request(360, 500)
+        dialog.set_default_size(380, 545)
+        dialog.set_size_request(380, 545)
         dialog.set_resizable(False)
 
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
