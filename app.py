@@ -44,8 +44,6 @@ window, window.background, .background, .mbvpn-window, .mullvad-window, .setting
     background-color: #0d111a;
     background: #0d111a;
     color: #e2e8f0;
-    min-width: 360px;
-    min-height: 500px;
     font-family: "Liberation Sans", "Inter", "Cantarell", system-ui, -apple-system, sans-serif;
 }
 
@@ -94,20 +92,32 @@ window, window.background, .background, .mbvpn-window, .mullvad-window, .setting
     background-color: #0d111a;
 }
 
-.sugg-chip {
-    background-color: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 9999px;
-    padding: 4px 10px;
-    font-size: 11px;
-    font-weight: 500;
-    color: #94a3b8;
+/* Split Tunneling Website Entry Bar */
+.split-add-box {
+    margin-top: 6px;
+    margin-bottom: 6px;
 }
 
-.sugg-chip:hover {
-    background-color: rgba(56, 189, 248, 0.15);
-    border-color: rgba(56, 189, 248, 0.35);
-    color: #38bdf8;
+.split-site-entry {
+    background-color: #0e1520;
+    color: #e6edf6;
+    border: 1px solid #24344a;
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 13px;
+}
+
+.split-site-entry:focus {
+    border-color: #3b76e1;
+    box-shadow: inset 0 0 0 1px rgba(59, 118, 225, 0.55);
+}
+
+.split-add-btn {
+    min-width: 60px;
+    padding: 7px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 8px;
 }
 
 /* Modern Hero Status Card with Ambient Sapphire Glow */
@@ -3157,33 +3167,25 @@ class MbVpnWindow(Adw.ApplicationWindow):
         self.switch_split_websites = sw_split
         group_split.add(sw_split)
 
-        # Entry Row for adding website
-        entry_site = Adw.EntryRow()
-        entry_site.set_title("Add Website or IP Address")
-        entry_site.set_show_apply_button(True)
-        entry_site.add_prefix(Gtk.Image.new_from_icon_name("list-add-symbolic"))
-        group_split.add(entry_site)
+        # Website Adding Bar matching UI design
+        box_add = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        box_add.add_css_class("split-add-box")
+        box_add.set_margin_top(6)
+        box_add.set_margin_bottom(6)
 
-        # Quick Suggestion Chips Box
-        box_sugg_wrapper = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        box_sugg_wrapper.set_margin_top(4)
-        box_sugg_wrapper.set_margin_bottom(6)
-        box_sugg_wrapper.set_margin_start(2)
+        entry_site = Gtk.Entry()
+        entry_site.add_css_class("split-site-entry")
+        entry_site.set_placeholder_text("Add website domain or IP (e.g. netflix.com)...")
+        entry_site.set_hexpand(True)
+        entry_site.set_icon_from_icon_name(Gtk.EntryIconPosition.PRIMARY, "web-browser-symbolic")
+        box_add.append(entry_site)
 
-        lbl_sugg = Gtk.Label(label="Quick Suggestions", xalign=0)
-        lbl_sugg.add_css_class("dim-label")
-        lbl_sugg.add_css_class("caption")
-        box_sugg_wrapper.append(lbl_sugg)
-
-        flow_sugg = Gtk.FlowBox()
-        flow_sugg.set_selection_mode(Gtk.SelectionMode.NONE)
-        flow_sugg.set_max_children_per_line(2)
-        flow_sugg.set_min_children_per_line(2)
-        flow_sugg.set_homogeneous(True)
-        flow_sugg.set_row_spacing(6)
-        flow_sugg.set_column_spacing(6)
-        box_sugg_wrapper.append(flow_sugg)
-        group_split.add(box_sugg_wrapper)
+        btn_add = Gtk.Button(label="Add")
+        btn_add.add_css_class("suggested-action")
+        btn_add.add_css_class("split-add-btn")
+        btn_add.set_valign(Gtk.Align.CENTER)
+        box_add.append(btn_add)
+        group_split.add(box_add)
 
         # Container for list of configured websites
         sites_box = Gtk.ListBox()
@@ -3217,23 +3219,7 @@ class MbVpnWindow(Adw.ApplicationWindow):
             configured = self.settings.get("split_tunnel_websites", [])
             is_enabled = self.settings.get("split_tunnel_websites_enabled", False)
 
-            # Update suggestions chips
-            child = flow_sugg.get_first_child()
-            while child:
-                next_c = child.get_next_sibling()
-                flow_sugg.remove(child)
-                child = next_c
-
-            common_suggestions = ["icanhazip.com", "speedtest.net", "netflix.com", "whatismyipaddress.com"]
-            for sugg in common_suggestions:
-                if sugg not in configured:
-                    btn_s = Gtk.Button(label=f"+ {sugg}")
-                    btn_s.add_css_class("sugg-chip")
-                    btn_s.connect("clicked", lambda _, s=sugg: add_website(s))
-                    flow_sugg.append(btn_s)
-
-            box_sugg_wrapper.set_visible(bool(flow_sugg.get_first_child()) and is_enabled)
-            entry_site.set_visible(is_enabled)
+            box_add.set_visible(is_enabled)
             sites_box.set_visible(is_enabled)
 
             if not configured:
@@ -3292,13 +3278,8 @@ class MbVpnWindow(Adw.ApplicationWindow):
                 sync_split_routing()
                 self._show_toast(f"Removed {site_to_remove} from bypass")
 
-        def on_entry_apply(row):
-            txt = row.get_text()
-            if txt:
-                add_website(txt)
-
-        entry_site.connect("apply", on_entry_apply)
-        entry_site.connect("entry-activated", on_entry_apply)
+        entry_site.connect("activate", lambda _: add_website(entry_site.get_text()))
+        btn_add.connect("clicked", lambda _: add_website(entry_site.get_text()))
 
         def on_split_toggled(row, _):
             val = row.get_active()
