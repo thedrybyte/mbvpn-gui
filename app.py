@@ -40,8 +40,9 @@ ASSETS_DIR = APP_DIR / "assets"
 # Exact Malwarebytes Privacy VPN UI Design Language & Themes
 CUSTOM_CSS = """
 /* Malwarebytes Privacy - Modern Commercial VPN System */
-window, window.background, window.mbvpn-window, .mbvpn-window, .mullvad-window {
+window, window.background, .background, .mbvpn-window, .mullvad-window, .settings-main-box, scrolledwindow, viewport {
     background-color: #0d111a;
+    background: #0d111a;
     color: #e2e8f0;
     min-width: 360px;
     min-height: 500px;
@@ -91,6 +92,22 @@ window, window.background, window.mbvpn-window, .mbvpn-window, .mullvad-window {
 
 .mbvpn-window scrolledwindow, .mullvad-window scrolledwindow {
     background-color: #0d111a;
+}
+
+.sugg-chip {
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 9999px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #94a3b8;
+}
+
+.sugg-chip:hover {
+    background-color: rgba(56, 189, 248, 0.15);
+    border-color: rgba(56, 189, 248, 0.35);
+    color: #38bdf8;
 }
 
 /* Modern Hero Status Card with Ambient Sapphire Glow */
@@ -2190,15 +2207,20 @@ class MbVpnWindow(Adw.ApplicationWindow):
         # Ensure killswitch and split tunneling bypass matches setting on startup
         def sync_killswitch():
             try:
+                if self.settings.get("split_tunnel_websites_enabled", False):
+                    sites = self.settings.get("split_tunnel_websites", [])
+                    status = self.backend.get_status()
+                    if status.connected and sites:
+                        self.backend.apply_website_split_tunneling(sites, enabled=True)
                 if not self.settings.get("hard_kill_switch", False):
                     self.backend.apply_split_tunneling(
                         self.settings.get("bypass_apps", []),
-                        self.settings.get("bypass_antigravity", True),
                     )
                 if self.settings.get("kill_switch"):
+                    bypass_ips = self.backend.get_bypassed_website_ips(self.settings.get("split_tunnel_websites", [])) if self.settings.get("split_tunnel_websites_enabled", False) else []
                     self.backend.enable_killswitch(
                         bypass_apps=self.settings.get("bypass_apps", []),
-                        bypass_antigravity=self.settings.get("bypass_antigravity", True),
+                        bypass_ips=bypass_ips,
                         hard=self.settings.get("hard_kill_switch", False),
                     )
                 else:
@@ -2309,8 +2331,9 @@ class MbVpnWindow(Adw.ApplicationWindow):
             "auto_reconnect": True,
             "auto_connect": False,
             "minimize_to_tray": True,
-            "bypass_antigravity": True,
-            "bypass_apps": [shutil.which("agy") or os.path.expanduser("~/.local/bin/agy"), shutil.which("foot") or "/usr/bin/foot"],
+            "bypass_apps": [],
+            "split_tunnel_websites_enabled": False,
+            "split_tunnel_websites": [],
             "last_target": "us",
             "last_label": "United States",
             "last_flag": "🇺🇸",
@@ -3023,12 +3046,15 @@ class MbVpnWindow(Adw.ApplicationWindow):
         """Settings, Kill Switch, DNS Shield, and Tunnel Configuration Modal"""
         dialog = Adw.Window(transient_for=self, modal=True)
         dialog.add_css_class("mullvad-window")
+        dialog.add_css_class("mbvpn-window")
         dialog.set_title("Settings")
         dialog.set_default_size(380, 560)
         dialog.set_size_request(360, 500)
         dialog.set_resizable(False)
+        self._settings_dialog = dialog
 
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        main_box.add_css_class("settings-main-box")
         dialog.set_content(main_box)
 
         header = Adw.HeaderBar()
@@ -3044,6 +3070,7 @@ class MbVpnWindow(Adw.ApplicationWindow):
         scroller = Gtk.ScrolledWindow()
         scroller.set_vexpand(True)
         main_box.append(scroller)
+        self._settings_scroller = scroller
 
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
         content.set_margin_top(12)
@@ -3116,6 +3143,177 @@ class MbVpnWindow(Adw.ApplicationWindow):
         group.add(sw_tray)
 
         content.append(group)
+
+        # Website Split Tunneling Group
+        group_split = Adw.PreferencesGroup()
+        group_split.set_title("Website Split Tunneling")
+        group_split.set_description("Route traffic for specific websites directly through local ISP instead of WireGuard")
+
+        sw_split = Adw.SwitchRow()
+        sw_split.set_title("Split Tunneling for Websites")
+        sw_split.set_subtitle("Bypass VPN for selected websites and domain names")
+        sw_split.add_prefix(Gtk.Image.new_from_icon_name("globe-symbolic"))
+        sw_split.set_active(self.settings.get("split_tunnel_websites_enabled", False))
+        self.switch_split_websites = sw_split
+        group_split.add(sw_split)
+
+        # Entry Row for adding website
+        entry_site = Adw.EntryRow()
+        entry_site.set_title("Add Website or IP Address")
+        entry_site.set_show_apply_button(True)
+        entry_site.add_prefix(Gtk.Image.new_from_icon_name("list-add-symbolic"))
+        group_split.add(entry_site)
+
+        # Quick Suggestion Chips Box
+        box_sugg_wrapper = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        box_sugg_wrapper.set_margin_top(4)
+        box_sugg_wrapper.set_margin_bottom(6)
+        box_sugg_wrapper.set_margin_start(2)
+
+        lbl_sugg = Gtk.Label(label="Quick Suggestions", xalign=0)
+        lbl_sugg.add_css_class("dim-label")
+        lbl_sugg.add_css_class("caption")
+        box_sugg_wrapper.append(lbl_sugg)
+
+        flow_sugg = Gtk.FlowBox()
+        flow_sugg.set_selection_mode(Gtk.SelectionMode.NONE)
+        flow_sugg.set_max_children_per_line(2)
+        flow_sugg.set_min_children_per_line(2)
+        flow_sugg.set_homogeneous(True)
+        flow_sugg.set_row_spacing(6)
+        flow_sugg.set_column_spacing(6)
+        box_sugg_wrapper.append(flow_sugg)
+        group_split.add(box_sugg_wrapper)
+
+        # Container for list of configured websites
+        sites_box = Gtk.ListBox()
+        sites_box.add_css_class("boxed-list")
+        sites_box.set_selection_mode(Gtk.SelectionMode.NONE)
+        group_split.add(sites_box)
+
+        def sync_split_routing():
+            if self.is_connected:
+                enabled = self.settings.get("split_tunnel_websites_enabled", False)
+                sites = self.settings.get("split_tunnel_websites", [])
+                threading.Thread(
+                    target=lambda: self.backend.apply_website_split_tunneling(sites, enabled=enabled),
+                    daemon=True
+                ).start()
+                if self.settings.get("kill_switch"):
+                    bypass_ips = self.backend.get_bypassed_website_ips(sites) if enabled else []
+                    threading.Thread(
+                        target=lambda: self.backend.enable_killswitch(bypass_ips=bypass_ips),
+                        daemon=True
+                    ).start()
+
+        def refresh_sites_ui():
+            # Clear existing children in sites_box
+            child = sites_box.get_first_child()
+            while child:
+                next_c = child.get_next_sibling()
+                sites_box.remove(child)
+                child = next_c
+
+            configured = self.settings.get("split_tunnel_websites", [])
+            is_enabled = self.settings.get("split_tunnel_websites_enabled", False)
+
+            # Update suggestions chips
+            child = flow_sugg.get_first_child()
+            while child:
+                next_c = child.get_next_sibling()
+                flow_sugg.remove(child)
+                child = next_c
+
+            common_suggestions = ["icanhazip.com", "speedtest.net", "netflix.com", "whatismyipaddress.com"]
+            for sugg in common_suggestions:
+                if sugg not in configured:
+                    btn_s = Gtk.Button(label=f"+ {sugg}")
+                    btn_s.add_css_class("sugg-chip")
+                    btn_s.connect("clicked", lambda _, s=sugg: add_website(s))
+                    flow_sugg.append(btn_s)
+
+            box_sugg_wrapper.set_visible(bool(flow_sugg.get_first_child()) and is_enabled)
+            entry_site.set_visible(is_enabled)
+            sites_box.set_visible(is_enabled)
+
+            if not configured:
+                row_empty = Adw.ActionRow()
+                row_empty.set_title("No websites bypassed")
+                row_empty.set_subtitle("All internet traffic routes through the WireGuard tunnel.")
+                row_empty.add_prefix(Gtk.Image.new_from_icon_name("channel-secure-symbolic"))
+                row_empty.set_visible(is_enabled)
+                sites_box.append(row_empty)
+                return
+
+            for site in configured:
+                row_item = Adw.ActionRow()
+                row_item.set_title(site)
+                row_item.set_subtitle("Direct ISP connection • Bypasses WireGuard")
+                row_item.add_prefix(Gtk.Image.new_from_icon_name("web-browser-symbolic"))
+
+                btn_remove = Gtk.Button(icon_name="user-trash-symbolic")
+                btn_remove.add_css_class("flat")
+                btn_remove.set_valign(Gtk.Align.CENTER)
+                btn_remove.set_tooltip_text(f"Remove {site} from bypass list")
+                btn_remove.connect("clicked", lambda _, s=site: remove_website(s))
+                row_item.add_suffix(btn_remove)
+                row_item.set_visible(is_enabled)
+                sites_box.append(row_item)
+
+        def add_website(target_text: str):
+            clean = target_text.strip().lower()
+            if "://" in clean:
+                clean = clean.split("://", 1)[1]
+            clean = clean.split("/")[0].split("?")[0].strip()
+            if not clean:
+                self._show_toast("Please enter a valid website domain or IP")
+                return
+
+            sites = self.settings.get("split_tunnel_websites", [])
+            if clean in sites:
+                self._show_toast(f"'{clean}' is already in the bypass list")
+                return
+
+            sites.append(clean)
+            self.settings["split_tunnel_websites"] = sites
+            self._save_settings()
+            entry_site.set_text("")
+            refresh_sites_ui()
+            sync_split_routing()
+            self._show_toast(f"Added {clean} to split tunneling")
+
+        def remove_website(site_to_remove: str):
+            sites = self.settings.get("split_tunnel_websites", [])
+            if site_to_remove in sites:
+                sites.remove(site_to_remove)
+                self.settings["split_tunnel_websites"] = sites
+                self._save_settings()
+                refresh_sites_ui()
+                sync_split_routing()
+                self._show_toast(f"Removed {site_to_remove} from bypass")
+
+        def on_entry_apply(row):
+            txt = row.get_text()
+            if txt:
+                add_website(txt)
+
+        entry_site.connect("apply", on_entry_apply)
+        entry_site.connect("entry-activated", on_entry_apply)
+
+        def on_split_toggled(row, _):
+            val = row.get_active()
+            self.settings["split_tunnel_websites_enabled"] = val
+            self._save_settings()
+            refresh_sites_ui()
+            sync_split_routing()
+            if val:
+                self._show_toast("Website split tunneling enabled")
+            else:
+                self._show_toast("Website split tunneling disabled")
+
+        sw_split.connect("notify::active", on_split_toggled)
+        refresh_sites_ui()
+        content.append(group_split)
 
         # Hardware Privacy & MAC Address Changer
         group_mac = Adw.PreferencesGroup()
@@ -3383,7 +3581,6 @@ class MbVpnWindow(Adw.ApplicationWindow):
                 def worker_enable():
                     success, msg = self.backend.enable_killswitch(
                         bypass_apps=self.settings.get("bypass_apps", []),
-                        bypass_antigravity=self.settings.get("bypass_antigravity", True),
                         hard=self.settings.get("hard_kill_switch", False),
                     )
                     def finish():
@@ -3437,7 +3634,6 @@ class MbVpnWindow(Adw.ApplicationWindow):
                         def worker_enable():
                             success, msg = self.backend.enable_killswitch(
                                 bypass_apps=self.settings.get("bypass_apps", []),
-                                bypass_antigravity=self.settings.get("bypass_antigravity", True),
                                 hard=self.settings.get("hard_kill_switch", False),
                             )
                             def finish():
@@ -3500,14 +3696,12 @@ class MbVpnWindow(Adw.ApplicationWindow):
                 success, message = self.backend.enable_killswitch(
                     endpoint_ip=None,
                     bypass_apps=self.settings.get("bypass_apps", []),
-                    bypass_antigravity=self.settings.get("bypass_antigravity", True),
                     hard=True,
                     tunnel_interface=self.backend.get_active_vpn_interface() if status.connected else None,
                 )
             elif getattr(self, "is_connected", False) and self.settings.get("kill_switch"):
                 success, message = self.backend.enable_killswitch(
                     bypass_apps=self.settings.get("bypass_apps", []),
-                    bypass_antigravity=self.settings.get("bypass_antigravity", True),
                 )
             else:
                 success, message = self.backend.disable_killswitch()
@@ -3988,10 +4182,18 @@ class MbVpnWindow(Adw.ApplicationWindow):
                     self.should_be_connected = False
                 elif success:
                     self.should_be_connected = True
+                    if self.settings.get("split_tunnel_websites_enabled", False):
+                        sites = self.settings.get("split_tunnel_websites", [])
+                        if sites:
+                            threading.Thread(
+                                target=lambda: self.backend.apply_website_split_tunneling(sites, enabled=True),
+                                daemon=True
+                            ).start()
                     if self.settings.get("kill_switch") and not hard_killswitch:
+                        bypass_ips = self.backend.get_bypassed_website_ips(self.settings.get("split_tunnel_websites", [])) if self.settings.get("split_tunnel_websites_enabled", False) else []
                         self.backend.enable_killswitch(
                             bypass_apps=self.settings.get("bypass_apps", []),
-                            bypass_antigravity=self.settings.get("bypass_antigravity", True),
+                            bypass_ips=bypass_ips,
                             hard=False,
                         )
                 else:
@@ -4506,7 +4708,7 @@ class MbVpnWindow(Adw.ApplicationWindow):
 class MbVpnApplication(Adw.Application):
     def __init__(self):
         super().__init__(
-            application_id="org.paradoxbyte.mbvpn",
+            application_id="org.drybyte.mbvpn",
             flags=Gio.ApplicationFlags.NON_UNIQUE,
         )
 
@@ -4518,7 +4720,7 @@ class MbVpnApplication(Adw.Application):
 
 
 def main():
-    GLib.set_prgname("org.paradoxbyte.mbvpn")
+    GLib.set_prgname("org.drybyte.mbvpn")
     GLib.set_application_name("MalwarebytesVPN")
     Gtk.Window.set_default_icon_name("mbvpn")
     app = MbVpnApplication()

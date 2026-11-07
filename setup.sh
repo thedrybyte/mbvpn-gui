@@ -14,10 +14,10 @@ echo "=================================================="
 echo "    Malwarebytes Privacy VPN - Linux Client Setup  "
 echo "=================================================="
 
-# 0. Check system dependencies (Arch Linux / pacman)
+# 0. Check system dependencies
 if command -v pacman >/dev/null 2>&1; then
     MISSING_PKGS=()
-    for pkg in python python-gobject gtk4 libadwaita networkmanager wireguard-tools nftables python-cairo; do
+    for pkg in python python-gobject gtk4 libadwaita networkmanager wireguard-tools nftables python-cairo gcc libcap; do
         if ! pacman -Q "$pkg" >/dev/null 2>&1; then
             MISSING_PKGS+=("$pkg")
         fi
@@ -28,6 +28,18 @@ if command -v pacman >/dev/null 2>&1; then
         echo "   sudo pacman -S --needed ${MISSING_PKGS[*]}"
         echo ""
     fi
+elif command -v apt-get >/dev/null 2>&1; then
+    echo ":: Debian/Ubuntu environment detected."
+    echo ":: Required dependencies: python3 python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 network-manager wireguard-tools libnftables-dev python3-cairo gcc libcap2-bin"
+    echo ":: If you encounter missing packages, install them with:"
+    echo "   sudo apt-get install -y python3 python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 network-manager wireguard-tools libnftables-dev python3-cairo gcc libcap2-bin"
+    echo ""
+elif command -v dnf >/dev/null 2>&1; then
+    echo ":: Fedora/RHEL environment detected."
+    echo ":: Required dependencies: python3 python3-gobject gtk4 libadwaita NetworkManager wireguard-tools nftables-devel python3-cairo gcc libcap"
+    echo ":: If you encounter missing packages, install them with:"
+    echo "   sudo dnf install -y python3 python3-gobject gtk4 libadwaita NetworkManager wireguard-tools nftables-devel python3-cairo gcc libcap"
+    echo ""
 fi
 
 # 1. Ensure official mbvpn WireGuard binary is present
@@ -66,7 +78,7 @@ echo "✓ Executable launcher installed to $BIN_DIR/mbvpn-gui"
 echo ":: Installing desktop entry and application icons..."
 mkdir -p "$DESKTOP_DIR" "$ICON_DIR/scalable/apps"
 cp "$SCRIPT_DIR/mbvpn.svg" "$ICON_DIR/scalable/apps/mbvpn.svg"
-cp "$SCRIPT_DIR/org.paradoxbyte.mbvpn.desktop" "$DESKTOP_DIR/org.paradoxbyte.mbvpn.desktop"
+cp "$SCRIPT_DIR/org.drybyte.mbvpn.desktop" "$DESKTOP_DIR/org.drybyte.mbvpn.desktop"
 
 for sz in 16 24 32 48 64 128 256 512; do
     mkdir -p "$ICON_DIR/${sz}x${sz}/apps"
@@ -76,7 +88,7 @@ for sz in 16 24 32 48 64 128 256 512; do
 done
 
 if [ -d "$HOME/Desktop" ]; then
-    cp "$SCRIPT_DIR/org.paradoxbyte.mbvpn.desktop" "$HOME/Desktop/MalwarebytesVPN.desktop"
+    cp "$SCRIPT_DIR/org.drybyte.mbvpn.desktop" "$HOME/Desktop/MalwarebytesVPN.desktop"
     chmod +x "$HOME/Desktop/MalwarebytesVPN.desktop"
 fi
 

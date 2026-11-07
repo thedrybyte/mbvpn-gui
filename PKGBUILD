@@ -51,7 +51,7 @@ package() {
     install -m755 mbvpn-firewall "$pkgdir/usr/bin/mbvpn-firewall"
 
     # Desktop entry & Icons
-    install -Dm644 "$src_path/org.paradoxbyte.mbvpn.desktop" "$pkgdir/usr/share/applications/org.paradoxbyte.mbvpn.desktop"
+    install -Dm644 "$src_path/org.drybyte.mbvpn.desktop" "$pkgdir/usr/share/applications/org.drybyte.mbvpn.desktop"
     install -Dm644 "$src_path/mbvpn.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/mbvpn.svg"
     for sz in 16 24 32 48 64 128 256 512; do
         if [ -f "$src_path/assets/mbvpn_${sz}.png" ]; then

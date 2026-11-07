@@ -9,6 +9,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import threading
 import uuid
@@ -246,7 +247,7 @@ class ProtonSplitTunneling:
         return os.path.exists("/usr/share/dbus-1/system-services/me.proton.vpn.split_tunneling.service")
 
     @classmethod
-    def apply_bypass_config(cls, app_paths: List[str], bypass_antigravity: bool = True) -> bool:
+    def apply_bypass_config(cls, app_paths: List[str], ip_ranges: Optional[List[str]] = None) -> bool:
         try:
             import asyncio
             from dbus_fast import BusType, Variant
@@ -258,25 +259,13 @@ class ProtonSplitTunneling:
                 proxy = bus.get_proxy_object(cls.SERVICE, cls.PATH, introspection)
                 iface = proxy.get_interface(cls.SERVICE)
 
-                paths = list(set(app_paths))
-                if bypass_antigravity:
-                    antigravity_paths = [
-                        os.path.expanduser("~/.local/bin/agy"),
-                        shutil.which("agy") or "",
-                        shutil.which("foot") or "/usr/bin/foot",
-                    ]
-                    for p in antigravity_paths:
-                        if p and os.path.exists(p) and p not in paths:
-                            paths.append(p)
-
-                ip_ranges = []
-                if bypass_antigravity:
-                    ip_ranges.extend(["172.217.0.0/16", "142.250.0.0/15", "34.0.0.0/8", "35.0.0.0/8"])
+                paths = [p for p in set(app_paths) if p and os.path.exists(p)]
+                ranges = ip_ranges or []
 
                 config = {
                     "mode": Variant("s", "exclude"),
                     "app_paths": Variant("as", paths),
-                    "ip_ranges": Variant("as", ip_ranges),
+                    "ip_ranges": Variant("as", ranges),
                 }
                 await iface.call_set_config(1000, config)
                 bus.disconnect()
@@ -298,11 +287,101 @@ class MbVpnBackend:
         self._active_vpn_interface: Optional[str] = None
         self._lock = threading.Lock()
 
-    def apply_split_tunneling(self, app_paths: List[str], bypass_antigravity: bool = True) -> bool:
+    def apply_split_tunneling(self, app_paths: List[str], ip_ranges: Optional[List[str]] = None) -> bool:
         """Applies application split tunneling / bypass using Proton's eBPF daemon."""
         if ProtonSplitTunneling.is_available():
-            return ProtonSplitTunneling.apply_bypass_config(app_paths, bypass_antigravity)
+            return ProtonSplitTunneling.apply_bypass_config(app_paths, ip_ranges)
         return False
+
+    def resolve_website_ips(self, target: str) -> List[str]:
+        """
+        Resolves domain names, hostnames, URLs or IPs into a list of IPv4 addresses.
+        Supports CIDR subnets (e.g. '192.168.1.0/24').
+        """
+        target = target.strip()
+        if not target:
+            return []
+        if "://" in target:
+            target = target.split("://", 1)[1]
+        target = target.split("/")[0].split("?")[0].split("#")[0].strip()
+        if ":" in target:
+            parts = target.split(":")
+            if len(parts) == 2 and parts[1].isdigit():
+                target = parts[0]
+        ip_pattern = r"^(\d{1,3}\.){3}\d{1,3}(/\d{1,2})?$"
+        if re.match(ip_pattern, target):
+            return [target]
+        ips = []
+        try:
+            addr_info = socket.getaddrinfo(target, None, socket.AF_INET, socket.SOCK_STREAM)
+            for item in addr_info:
+                ip = item[4][0]
+                if ip not in ips:
+                    ips.append(ip)
+        except Exception:
+            try:
+                ip = socket.gethostbyname(target)
+                if ip and ip not in ips:
+                    ips.append(ip)
+            except Exception:
+                pass
+        return ips
+
+    def get_bypassed_website_ips(self, websites: List[str]) -> List[str]:
+        """Resolves a list of websites or domains into a unique list of IP addresses."""
+        all_ips = []
+        for site in websites:
+            for ip in self.resolve_website_ips(site):
+                if ip not in all_ips:
+                    all_ips.append(ip)
+        return all_ips
+
+    def apply_website_split_tunneling(self, websites: List[str], enabled: bool = True) -> Tuple[bool, str]:
+        """
+        Routes traffic for the specified websites / IPs directly via the local physical interface,
+        bypassing the WireGuard VPN tunnel.
+        """
+        if not self.is_firewall_available():
+            return False, "Firewall helper not available"
+
+        # Always flush previous split-tunnel routes first
+        self.clear_website_split_tunneling()
+
+        if not enabled or not websites:
+            return True, "Split tunneling inactive"
+
+        ips_to_bypass = self.get_bypassed_website_ips(websites)
+        if not ips_to_bypass:
+            return False, "No valid IP addresses could be resolved for the specified websites"
+
+        added_count = 0
+        for ip in ips_to_bypass:
+            try:
+                res = subprocess.run([self.firewall_path, "route-add", ip], capture_output=True, text=True, timeout=3, check=False)
+                if res.returncode == 0:
+                    added_count += 1
+            except Exception:
+                pass
+
+        return True, f"Bypassed {added_count} IP(s) for {len(websites)} website(s)"
+
+    def clear_website_split_tunneling(self) -> bool:
+        """Removes all split-tunnel routes (proto 77) from the routing table."""
+        if not self.is_firewall_available():
+            return False
+        try:
+            res = subprocess.run([self.firewall_path, "route-flush"], capture_output=True, text=True, timeout=4, check=False)
+            return res.returncode == 0
+        except Exception:
+            return False
+
+    def get_active_split_tunnel_routes(self) -> List[str]:
+        """Returns the list of active split-tunnel routes configured in kernel."""
+        try:
+            res = subprocess.run(["ip", "-4", "route", "show", "proto", "77"], capture_output=True, text=True, timeout=2, check=False)
+            return [line.strip() for line in res.stdout.splitlines() if line.strip()]
+        except Exception:
+            return []
 
     def _find_binary(self) -> str:
         candidates = [
@@ -1017,6 +1096,9 @@ class MbVpnBackend:
         return False, output or f"Failed to connect to {target}"
 
     def disconnect(self, hard_killswitch: bool = False) -> Tuple[bool, str]:
+        # Flush split tunnel routes when disconnecting
+        self.clear_website_split_tunneling()
+
         # Normal KS: disable firewall rules so physical internet is restored on disconnect.
         # Hard KS: keep rules active — they block traffic until the next connect() re-whitelists
         # the new endpoint. Use cached _killswitch_active to avoid a subprocess call here.
@@ -1053,9 +1135,9 @@ class MbVpnBackend:
         endpoint_ip: Optional[str] = None,
         endpoint_port: Optional[int] = None,
         bypass_apps: Optional[List[str]] = None,
-        bypass_antigravity: bool = True,
         hard: bool = False,
         tunnel_interface: Optional[str] = None,
+        bypass_ips: Optional[List[str]] = None,
     ) -> Tuple[bool, str]:
         """
         Enables the Linux VPN kill switch.
@@ -1065,7 +1147,7 @@ class MbVpnBackend:
             if not self.supports_hard_killswitch():
                 return False, "Hard Kill Switch needs the updated firewall helper. Run setup.sh first."
         else:
-            self.apply_split_tunneling(bypass_apps or [], bypass_antigravity)
+            self.apply_split_tunneling(bypass_apps or [])
 
         status = self.get_status()
         if not status.connected:
@@ -1092,12 +1174,15 @@ class MbVpnBackend:
             if hard:
                 # Delegate to dedicated helper that calls the firewall directly
                 iface = tunnel_interface or self.get_active_vpn_interface() or ""
-                return self._apply_hard_ks_rules(endpoint_ip=endpoint_ip, endpoint_port=endpoint_port, tunnel_interface=iface)
-            args = [self.firewall_path, "enable"]
-            if endpoint_ip:
-                args.append(endpoint_ip)
-                if endpoint_port:
-                    args.append(str(endpoint_port))
+                return self._apply_hard_ks_rules(endpoint_ip=endpoint_ip, endpoint_port=endpoint_port, tunnel_interface=iface, bypass_ips=bypass_ips)
+            args = [
+                self.firewall_path, "enable",
+                endpoint_ip or "",
+                str(endpoint_port or 51820),
+                "standard",
+                tunnel_interface or "",
+                ",".join(bypass_ips) if bypass_ips else "",
+            ]
             try:
                 res = subprocess.run(args, capture_output=True, text=True, timeout=8, check=False)
                 output = (res.stdout + "\n" + res.stderr).strip()
@@ -1115,6 +1200,7 @@ class MbVpnBackend:
         endpoint_ip: Optional[str] = None,
         endpoint_port: Optional[int] = None,
         tunnel_interface: Optional[str] = None,
+        bypass_ips: Optional[List[str]] = None,
     ) -> Tuple[bool, str]:
         """
         Directly invokes mbvpn-firewall in hard mode.
@@ -1130,6 +1216,7 @@ class MbVpnBackend:
             str(endpoint_port or 51820),
             "hard",
             tunnel_interface or "",
+            ",".join(bypass_ips) if bypass_ips else "",
         ]
         try:
             res = subprocess.run(args, capture_output=True, text=True, timeout=8, check=False)

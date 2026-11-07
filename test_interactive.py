@@ -123,6 +123,18 @@ def run_interactive_qa():
         assert hasattr(win.backend, "disable_killswitch"), "Backend missing disable_killswitch"
         assert hasattr(win.backend, "is_killswitch_active"), "Backend missing is_killswitch_active"
         assert hasattr(win.backend, "apply_split_tunneling"), "Backend missing apply_split_tunneling"
+        assert hasattr(win.backend, "resolve_website_ips"), "Backend missing resolve_website_ips"
+        assert hasattr(win.backend, "apply_website_split_tunneling"), "Backend missing apply_website_split_tunneling"
+        assert hasattr(win.backend, "clear_website_split_tunneling"), "Backend missing clear_website_split_tunneling"
+        assert hasattr(win, "switch_split_websites"), "Settings missing switch_split_websites"
+
+        # Verify domain resolution and website split tunneling toggles
+        test_ips = win.backend.resolve_website_ips("1.1.1.1")
+        assert "1.1.1.1" in test_ips, f"Expected 1.1.1.1 in resolved IPs, got {test_ips}"
+        win.switch_split_websites.set_active(True)
+        assert win.settings.get("split_tunnel_websites_enabled") is True
+        win.switch_split_websites.set_active(False)
+        assert win.settings.get("split_tunnel_websites_enabled") is False
 
         # Toggle DNS Shield
         win.switch_dns.set_active(True)

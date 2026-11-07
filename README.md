@@ -30,6 +30,13 @@ A tier-1 native Linux desktop client for **Malwarebytes Privacy VPN**, engineere
 - Never blocks or cuts physical internet when the VPN is manually disconnected.
 - Isolates raw network traffic automatically if the WireGuard tunnel drops unexpectedly.
 
+### 🌐 Website Split Tunneling (Domain & IP Bypass)
+- Selectively bypass the WireGuard tunnel for specific websites, domain names, or IP addresses (e.g., streaming services, local network resources, banking portals).
+- Bypassed traffic routes directly through your local physical network interface (ISP) while all other applications remain encrypted.
+- Kernel-level Netlink route injection with custom routing protocol (`proto 77`) and automatic Kill Switch firewall integration.
+- Instant dynamic updates without dropping or reconnecting active tunnels.
+- Quick suggestion chips for common bypass targets (`icanhazip.com`, `speedtest.net`, `netflix.com`, etc.).
+
 ### 🎭 Hardware Privacy & MAC Randomizer
 - One-click instant spoofing and rotation to compliant locally-administered unicast MAC addresses.
 - Automatic per-network Wi-Fi MAC address randomization across access points.
@@ -69,7 +76,7 @@ makepkg -si
 This builds and installs:
 - Executable binary to `/usr/bin/mbvpn-gui`
 - Kernel firewall helper to `/usr/bin/mbvpn-firewall`
-- Desktop entry to `/usr/share/applications/org.paradoxbyte.mbvpn.desktop`
+- Desktop entry to `/usr/share/applications/org.drybyte.mbvpn.desktop`
 - Vector and multi-size application icons to `/usr/share/icons/hicolor/`
 - Polkit DNS rule to `/usr/share/polkit-1/rules.d/10-mbvpn.rules`
 
@@ -101,7 +108,40 @@ sudo pacman -S --needed \
     wireguard-tools \
     nftables \
     python-cairo \
-    gcc
+    gcc \
+    libcap
+```
+
+### Debian / Ubuntu / Linux Mint / Pop!_OS (`apt`)
+
+```bash
+sudo apt-get install -y \
+    python3 \
+    python3-gi \
+    gir1.2-gtk-4.0 \
+    gir1.2-adw-1 \
+    network-manager \
+    wireguard-tools \
+    libnftables-dev \
+    python3-cairo \
+    gcc \
+    libcap2-bin
+```
+
+### Fedora / RHEL (`dnf`)
+
+```bash
+sudo dnf install -y \
+    python3 \
+    python3-gobject \
+    gtk4 \
+    libadwaita \
+    NetworkManager \
+    wireguard-tools \
+    nftables-devel \
+    python3-cairo \
+    gcc \
+    libcap
 ```
 
 ### Official WireGuard Backend Binary
@@ -163,7 +203,7 @@ mbvpn-gui/
 ├── tray.py                        # StatusNotifierItem (SNI) D-Bus system tray
 ├── firewall.c                     # High-performance Linux nftables Kill Switch helper
 ├── 10-mbvpn.rules                 # Polkit policy for passwordless systemd-resolved
-├── org.paradoxbyte.mbvpn.desktop  # XDG desktop entry
+├── org.drybyte.mbvpn.desktop  # XDG desktop entry
 ├── mbvpn.svg                      # Scalable application icon
 ├── assets/                        # Multi-res icons, country flags & server metadata
 ├── test_interactive.py            # Comprehensive interactive QA test suite
